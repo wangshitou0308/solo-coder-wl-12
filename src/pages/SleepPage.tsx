@@ -12,7 +12,7 @@ import {
 } from "@/utils/calc";
 
 export default function SleepPage() {
-  const { records, fetchRecords, addRecord, deleteRecord } = useSleepStore();
+  const { records, fetchRecords, addRecord, updateRecord, deleteRecord } = useSleepStore();
 
   const [date, setDate] = useState(getTodayString());
   const [bedTime, setBedTime] = useState("23:00");
@@ -20,6 +20,7 @@ export default function SleepPage() {
   const [fallAsleepMinutes, setFallAsleepMinutes] = useState(15);
   const [qualityRating, setQualityRating] = useState(3);
   const [factors, setFactors] = useState<SleepFactor[]>([]);
+  const [saveMsg, setSaveMsg] = useState("");
 
   useEffect(() => {
     fetchRecords();
@@ -27,9 +28,10 @@ export default function SleepPage() {
 
   const sleepDuration =
     bedTime && wakeTime ? calculateSleepDuration(bedTime, wakeTime) : 0;
+  const clampedFallAsleep = Math.max(0, fallAsleepMinutes);
   const sleepEfficiency =
     sleepDuration > 0
-      ? calculateSleepEfficiency(sleepDuration, fallAsleepMinutes)
+      ? calculateSleepEfficiency(sleepDuration, clampedFallAsleep)
       : 0;
 
   const toggleFactor = (factor: SleepFactor) => {
@@ -43,26 +45,28 @@ export default function SleepPage() {
   const handleSave = async () => {
     if (!date || !bedTime || !wakeTime) return;
     const now = Date.now();
+    const existing = records.find((r) => r.date === date);
     const record: SleepRecord = {
-      id: generateId(),
+      id: existing ? existing.id : generateId(),
       date,
       bedTime,
       wakeTime,
-      fallAsleepMinutes,
+      fallAsleepMinutes: clampedFallAsleep,
       sleepDuration,
       sleepEfficiency,
       qualityRating,
       factors,
-      createdAt: now,
+      createdAt: existing ? existing.createdAt : now,
       updatedAt: now,
     };
-    await addRecord(record);
-    setDate(getTodayString());
-    setBedTime("23:00");
-    setWakeTime("07:00");
-    setFallAsleepMinutes(15);
-    setQualityRating(3);
-    setFactors([]);
+    if (existing) {
+      await updateRecord(record);
+      setSaveMsg("已更新该日期记录");
+    } else {
+      await addRecord(record);
+      setSaveMsg("保存成功");
+    }
+    setTimeout(() => setSaveMsg(""), 2000);
   };
 
   const handleDelete = async (id: string) => {
@@ -120,7 +124,10 @@ export default function SleepPage() {
               className="input-field w-full"
               value={fallAsleepMinutes}
               min={0}
-              onChange={(e) => setFallAsleepMinutes(Number(e.target.value))}
+              onChange={(e) => {
+                const v = Number(e.target.value);
+                setFallAsleepMinutes(v < 0 ? 0 : v);
+              }}
             />
           </div>
         </div>
@@ -182,7 +189,10 @@ export default function SleepPage() {
           </div>
         </div>
 
-        <div className="flex justify-end">
+        <div className="flex items-center justify-end gap-3">
+          {saveMsg && (
+            <span className="text-sm text-stargold animate-pulse">{saveMsg}</span>
+          )}
           <button
             type="button"
             onClick={handleSave}

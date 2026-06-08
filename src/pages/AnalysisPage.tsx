@@ -10,7 +10,7 @@ import {
   DreamRecord,
 } from "@/types";
 import { useSleepStore, useDreamStore } from "@/stores";
-import { getBedtimeHour } from "@/utils/calc";
+import { isLateBedtime } from "@/utils/calc";
 
 ChartJS.register(...registerables);
 
@@ -82,17 +82,17 @@ export default function AnalysisPage() {
       (j) => !j.sleep.factors.some((f) => f === "咖啡" || f === "茶")
     );
     const lateBed = joinedData.filter(
-      (j) => getBedtimeHour(j.sleep.bedTime) >= 1
+      (j) => isLateBedtime(j.sleep.bedTime)
     );
     const earlyBed = joinedData.filter(
-      (j) => getBedtimeHour(j.sleep.bedTime) < 1
+      (j) => !isLateBedtime(j.sleep.bedTime)
     );
 
     const labels = [
       "咖啡因摄入日",
       "无咖啡因日",
-      "入睡晚于凌晨1点",
-      "入睡早于凌晨1点",
+      "凌晨1-6点入睡",
+      "正常时间入睡",
     ];
     const groups = [caffeineYes, caffeineNo, lateBed, earlyBed];
 

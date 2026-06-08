@@ -13,11 +13,12 @@ import { useDreamStore } from "@/stores";
 import { generateId, getTodayString, formatDate, extractKeywords } from "@/utils/calc";
 
 export default function DreamPage() {
-  const { records, fetchRecords, addRecord, deleteRecord } = useDreamStore();
+  const { records, fetchRecords, addRecord, updateRecord, deleteRecord } = useDreamStore();
   const [date, setDate] = useState(getTodayString());
   const [content, setContent] = useState("");
   const [dreamType, setDreamType] = useState<DreamType>("普通梦");
   const [emotions, setEmotions] = useState<DreamEmotion[]>([]);
+  const [saveMsg, setSaveMsg] = useState("");
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
   useEffect(() => {
@@ -39,16 +40,24 @@ export default function DreamPage() {
   async function handleSave() {
     if (!content.trim()) return;
     const now = Date.now();
+    const existing = records.find((r) => r.date === date);
     const record: DreamRecord = {
-      id: generateId(),
+      id: existing ? existing.id : generateId(),
       date,
       content: content.trim(),
       dreamType,
       emotions,
-      createdAt: now,
+      createdAt: existing ? existing.createdAt : now,
       updatedAt: now,
     };
-    await addRecord(record);
+    if (existing) {
+      await updateRecord(record);
+      setSaveMsg("已更新该日期梦境");
+    } else {
+      await addRecord(record);
+      setSaveMsg("保存成功");
+    }
+    setTimeout(() => setSaveMsg(""), 2000);
     setContent("");
     setEmotions([]);
     setDreamType("普通梦");
@@ -182,10 +191,15 @@ export default function DreamPage() {
           </div>
         </div>
 
-        <button className="btn-primary flex items-center gap-2" onClick={handleSave}>
-          <Save size={16} />
-          保存梦境
-        </button>
+        <div className="flex items-center gap-3">
+          {saveMsg && (
+            <span className="text-sm text-stargold animate-pulse">{saveMsg}</span>
+          )}
+          <button className="btn-primary flex items-center gap-2" onClick={handleSave}>
+            <Save size={16} />
+            保存梦境
+          </button>
+        </div>
       </div>
 
       <div className="glass-card p-6 space-y-3">

@@ -14,8 +14,11 @@ export function calculateSleepEfficiency(
   fallAsleepMinutes: number
 ): number {
   if (sleepDurationMinutes <= 0) return 0;
-  const totalTimeInBed = sleepDurationMinutes + fallAsleepMinutes;
-  return Math.round((sleepDurationMinutes / totalTimeInBed) * 100);
+  const clampedFallAsleep = Math.max(0, fallAsleepMinutes);
+  const totalTimeInBed = sleepDurationMinutes + clampedFallAsleep;
+  if (totalTimeInBed <= 0) return 0;
+  const efficiency = Math.round((sleepDurationMinutes / totalTimeInBed) * 100);
+  return Math.min(efficiency, 100);
 }
 
 export function formatMinutes(minutes: number): string {
@@ -26,8 +29,15 @@ export function formatMinutes(minutes: number): string {
   return `${h}小时${m}分钟`;
 }
 
+function toLocalDateStr(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
 export function formatDate(dateStr: string): string {
-  const d = new Date(dateStr);
+  const d = new Date(dateStr + "T00:00:00");
   const month = d.getMonth() + 1;
   const day = d.getDate();
   const weekdays = ["日", "一", "二", "三", "四", "五", "六"];
@@ -35,7 +45,11 @@ export function formatDate(dateStr: string): string {
 }
 
 export function getTodayString(): string {
-  return new Date().toISOString().split("T")[0];
+  const now = new Date();
+  const y = now.getFullYear();
+  const m = String(now.getMonth() + 1).padStart(2, "0");
+  const d = String(now.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
 }
 
 export function getWeekRange(): { start: string; end: string } {
@@ -46,8 +60,8 @@ export function getWeekRange(): { start: string; end: string } {
   const sunday = new Date(monday);
   sunday.setDate(monday.getDate() + 6);
   return {
-    start: monday.toISOString().split("T")[0],
-    end: sunday.toISOString().split("T")[0],
+    start: toLocalDateStr(monday),
+    end: toLocalDateStr(sunday),
   };
 }
 
@@ -55,8 +69,8 @@ export function getMonthRange(date?: Date): { start: string; end: string } {
   const d = date || new Date();
   const year = d.getFullYear();
   const month = d.getMonth();
-  const start = new Date(year, month, 1).toISOString().split("T")[0];
-  const end = new Date(year, month + 1, 0).toISOString().split("T")[0];
+  const start = toLocalDateStr(new Date(year, month, 1));
+  const end = toLocalDateStr(new Date(year, month + 1, 0));
   return { start, end };
 }
 
@@ -92,4 +106,9 @@ export function extractKeywords(text: string): Map<string, number> {
 export function getBedtimeHour(bedTime: string): number {
   const [h] = bedTime.split(":").map(Number);
   return h;
+}
+
+export function isLateBedtime(bedTime: string): boolean {
+  const h = getBedtimeHour(bedTime);
+  return h >= 1 && h < 6;
 }
