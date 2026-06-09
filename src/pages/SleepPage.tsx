@@ -25,10 +25,23 @@ export default function SleepPage() {
   const [qualityRating, setQualityRating] = useState(3);
   const [factors, setFactors] = useState<SleepFactor[]>([]);
   const [saveMsg, setSaveMsg] = useState("");
+  const [saveError, setSaveError] = useState("");
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [confirmModal, setConfirmModal] = useState<{ open: boolean; recordId: string | null }>({
+  type ConfirmKind = "delete" | "overwrite";
+  const [confirmModal, setConfirmModal] = useState<{
+    open: boolean;
+    kind: ConfirmKind;
+    recordId: string | null;
+    overwrite: {
+      originalRecordId: string;
+      targetRecordId: string;
+      targetDate: string;
+    } | null;
+  }>({
     open: false,
+    kind: "delete",
     recordId: null,
+    overwrite: null,
   });
   const [showDreamPrompt, setShowDreamPrompt] = useState(false);
   const [lastSavedDate, setLastSavedDate] = useState("");
@@ -78,23 +91,85 @@ export default function SleepPage() {
   };
 
   const handleConfirmDelete = (recordId: string) => {
-    setConfirmModal({ open: true, recordId });
+    setConfirmModal({
+      open: true,
+      kind: "delete",
+      recordId,
+      overwrite: null,
+    });
   };
 
-  const handleDeleteConfirmed = () => {
-    if (confirmModal.recordId) {
-      deleteRecord(confirmModal.recordId);
+  const handleConfirmOk = async () => {
+    if (!confirmModal.open) return;
+
+    if (confirmModal.kind === "delete" && confirmModal.recordId) {
+      try {
+        await deleteRecord(confirmModal.recordId);
+      } catch (e) {
+        console.error("删除失败", e);
+      }
     }
-    setConfirmModal({ open: false, recordId: null });
+
+    if (confirmModal.kind === "overwrite" && confirmModal.overwrite) {
+      const { originalRecordId, targetRecordId, targetDate } = confirmModal.overwrite;
+      setDate(targetDate);
+      await performSave({
+        forceDeleteId: originalRecordId,
+        forceOverwriteId: targetRecordId,
+      });
+    }
+
+    setConfirmModal({
+      open: false,
+      kind: "delete",
+      recordId: null,
+      overwrite: null,
+    });
   };
 
-  const handleSave = async () => {
-    if (!date || !bedTime || !wakeTime) return;
+  const handleConfirmCancel = () => {
+    setConfirmModal({
+      open: false,
+      kind: "delete",
+      recordId: null,
+      overwrite: null,
+    });
+  };
+
+  const performSave = async (opts?: {
+    forceDeleteId?: string;
+    forceOverwriteId?: string;
+  }) => {
     const now = Date.now();
-    const existing = records.find((r) => r.date === date);
     const isEditing = editingId !== null;
+    const originalRecord = isEditing ? records.find((r) => r.id === editingId) : undefined;
+    const sameDateRecord = records.find((r) => r.date === date);
+
+    let recordId: string;
+    if (opts?.forceOverwriteId) {
+      recordId = opts.forceOverwriteId;
+    } else if (isEditing) {
+      recordId = editingId!;
+    } else if (sameDateRecord) {
+      recordId = sameDateRecord.id;
+    } else {
+      recordId = generateId();
+    }
+
+    let createdAt: number;
+    if (opts?.forceOverwriteId) {
+      const target = records.find((r) => r.id === opts.forceOverwriteId);
+      createdAt = target ? target.createdAt : now;
+    } else if (isEditing && originalRecord) {
+      createdAt = originalRecord.createdAt;
+    } else if (sameDateRecord) {
+      createdAt = sameDateRecord.createdAt;
+    } else {
+      createdAt = now;
+    }
+
     const record: SleepRecord = {
-      id: isEditing ? editingId! : existing ? existing.id : generateId(),
+      id: recordId,
       date,
       bedTime,
       wakeTime,
@@ -103,20 +178,69 @@ export default function SleepPage() {
       sleepEfficiency,
       qualityRating,
       factors,
-      createdAt: existing ? existing.createdAt : now,
+      createdAt,
       updatedAt: now,
     };
-    if (existing || isEditing) {
-      await updateRecord(record);
-      setSaveMsg("已更新该日期记录");
-    } else {
-      await addRecord(record);
-      setSaveMsg("保存成功");
-      setShowDreamPrompt(true);
-      setLastSavedDate(date);
+
+    try {
+      if (opts?.forceDeleteId) {
+        await deleteRecord(opts.forceDeleteId);
+      }
+
+      const isUpdate = isEditing || !!sameDateRecord || !!opts?.forceOverwriteId;
+      if (isUpdate) {
+        await updateRecord(record);
+        setSaveMsg(
+          opts?.forceOverwriteId
+            ? `已覆盖 ${formatDate(date)} 的记录`
+            : "已更新该日期记录"
+        );
+      } else {
+        await addRecord(record);
+        setSaveMsg("保存成功");
+        setShowDreamPrompt(true);
+        setLastSavedDate(date);
+      }
+
+      resetForm();
+      setTimeout(() => setSaveMsg(""), 2500);
+    } catch (e) {
+      console.error("保存失败", e);
+      setSaveError("保存失败，可能日期已存在或数据库异常，请重试");
+      setTimeout(() => setSaveError(""), 3500);
     }
-    resetForm();
-    setTimeout(() => setSaveMsg(""), 2000);
+  };
+
+  const handleSave = async () => {
+    if (!date || !bedTime || !wakeTime) return;
+    setSaveMsg("");
+    setSaveError("");
+
+    const isEditing = editingId !== null;
+    const originalRecord = isEditing ? records.find((r) => r.id === editingId) : undefined;
+    const sameDateRecord = records.find((r) => r.date === date);
+
+    if (
+      isEditing &&
+      originalRecord &&
+      originalRecord.date !== date &&
+      sameDateRecord &&
+      sameDateRecord.id !== editingId
+    ) {
+      setConfirmModal({
+        open: true,
+        kind: "overwrite",
+        recordId: null,
+        overwrite: {
+          originalRecordId: editingId,
+          targetRecordId: sameDateRecord.id,
+          targetDate: date,
+        },
+      });
+      return;
+    }
+
+    await performSave();
   };
 
   return (
@@ -246,6 +370,9 @@ export default function SleepPage() {
           {saveMsg && (
             <span className="text-sm text-stargold animate-pulse">{saveMsg}</span>
           )}
+          {saveError && (
+            <span className="text-sm text-red-400">{saveError}</span>
+          )}
           {editingId !== null && (
             <button
               type="button"
@@ -359,11 +486,17 @@ export default function SleepPage() {
 
       <ConfirmModal
         open={confirmModal.open}
-        title="删除睡眠记录"
-        message="确定要删除这条睡眠记录吗？此操作无法撤销。"
+        title={confirmModal.kind === "delete" ? "删除睡眠记录" : "日期冲突，是否覆盖？"}
+        message={
+          confirmModal.kind === "delete"
+            ? "确定要删除这条睡眠记录吗？此操作无法撤销。"
+            : confirmModal.overwrite
+              ? `目标日期 ${formatDate(confirmModal.overwrite.targetDate)} 已经有一条睡眠记录。用当前内容覆盖后，原来正在编辑的记录将被删除，目标日期的旧内容会被替换。此操作无法撤销。`
+              : ""
+        }
         type="danger"
-        onConfirm={handleDeleteConfirmed}
-        onCancel={() => setConfirmModal({ open: false, recordId: null })}
+        onConfirm={handleConfirmOk}
+        onCancel={handleConfirmCancel}
       />
     </div>
   );

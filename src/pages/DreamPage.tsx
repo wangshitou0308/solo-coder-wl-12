@@ -23,10 +23,22 @@ export default function DreamPage() {
   const [dreamType, setDreamType] = useState<DreamType>("普通梦");
   const [emotions, setEmotions] = useState<DreamEmotion[]>([]);
   const [saveMsg, setSaveMsg] = useState("");
+  const [saveError, setSaveError] = useState("");
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [confirmModal, setConfirmModal] = useState<{ open: boolean; recordId: string | null }>({
+  const [confirmModal, setConfirmModal] = useState<{
+    open: boolean;
+    kind: "delete" | "overwrite";
+    recordId: string | null;
+    overwrite?: {
+      originalRecordId: string;
+      targetRecordId: string;
+      targetDate: string;
+    } | null;
+  }>({
     open: false,
+    kind: "delete" as const,
     recordId: null,
+    overwrite: null,
   });
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
@@ -73,31 +85,35 @@ export default function DreamPage() {
   }
 
   function handleConfirmDelete(recordId: string) {
-    setConfirmModal({ open: true, recordId });
+    setConfirmModal({
+      open: true,
+      kind: "delete",
+      recordId,
+      overwrite: null,
+    });
   }
 
-  async function handleDeleteConfirmed() {
-    if (confirmModal.recordId) {
-      await deleteRecord(confirmModal.recordId);
-    }
-    setConfirmModal({ open: false, recordId: null });
-  }
-
-  async function handleSave() {
+  async function performSave(opts?: { forceDeleteId?: string; forceOverwriteId?: string }) {
     if (!content.trim()) return;
-    const now = Date.now();
-    let recordId: string;
-    let createdAt: number;
 
-    if (editingId) {
-      const existing = records.find((r) => r.id === editingId);
-      recordId = editingId;
-      createdAt = existing ? existing.createdAt : now;
-    } else {
-      const existingByDate = records.find((r) => r.date === date);
-      recordId = existingByDate ? existingByDate.id : generateId();
-      createdAt = existingByDate ? existingByDate.createdAt : now;
-    }
+    const now = Date.now();
+    const isEditing = editingId !== null;
+    const originalRecord = isEditing ? records.find((r) => r.id === editingId) : undefined;
+    const sameDateRecord = records.find((r) => r.date === date);
+
+    let recordId: string;
+    if (opts?.forceOverwriteId) recordId = opts.forceOverwriteId;
+    else if (isEditing) recordId = editingId!;
+    else if (sameDateRecord) recordId = sameDateRecord.id;
+    else recordId = generateId();
+
+    let createdAt: number;
+    if (opts?.forceOverwriteId) {
+      const target = records.find((r) => r.id === opts.forceOverwriteId);
+      createdAt = target ? target.createdAt : now;
+    } else if (isEditing && originalRecord) createdAt = originalRecord.createdAt;
+    else if (sameDateRecord) createdAt = sameDateRecord.createdAt;
+    else createdAt = now;
 
     const record: DreamRecord = {
       id: recordId,
@@ -109,17 +125,98 @@ export default function DreamPage() {
       updatedAt: now,
     };
 
-    if (editingId || records.find((r) => r.date === date)) {
-      await updateRecord(record);
-      setSaveMsg(editingId ? "编辑已保存" : "已更新该日期梦境");
-    } else {
-      await addRecord(record);
-      setSaveMsg("保存成功");
+    try {
+      if (opts?.forceDeleteId) await deleteRecord(opts.forceDeleteId);
+
+      const isUpdate = isEditing || !!sameDateRecord || !!opts?.forceOverwriteId;
+      if (isUpdate) {
+        await updateRecord(record);
+        setSaveMsg(
+          opts?.forceOverwriteId
+            ? `已覆盖 ${formatDate(date)} 的梦境`
+            : editingId
+              ? "编辑已保存"
+              : "已更新该日期梦境"
+        );
+      } else {
+        await addRecord(record);
+        setSaveMsg("保存成功");
+      }
+
+      setTimeout(() => setSaveMsg(""), 2500);
+      resetFormContent();
+      setEditingId(null);
+    } catch (e) {
+      console.error("保存失败", e);
+      setSaveError("保存失败，可能日期已存在或数据库异常，请重试");
+      setTimeout(() => setSaveError(""), 3500);
+    }
+  }
+
+  async function handleSave() {
+    if (!content.trim()) return;
+    setSaveMsg("");
+    setSaveError("");
+
+    const isEditing = editingId !== null;
+    const originalRecord = isEditing ? records.find((r) => r.id === editingId) : undefined;
+    const sameDateRecord = records.find((r) => r.date === date);
+
+    if (
+      isEditing &&
+      originalRecord &&
+      originalRecord.date !== date &&
+      sameDateRecord &&
+      sameDateRecord.id !== editingId
+    ) {
+      setConfirmModal({
+        open: true,
+        kind: "overwrite",
+        recordId: null,
+        overwrite: {
+          originalRecordId: editingId,
+          targetRecordId: sameDateRecord.id,
+          targetDate: date,
+        },
+      });
+      return;
     }
 
-    setTimeout(() => setSaveMsg(""), 2000);
-    resetFormContent();
-    setEditingId(null);
+    await performSave();
+  }
+
+  async function handleConfirmOk() {
+    if (confirmModal.kind === "delete" && confirmModal.recordId) {
+      await deleteRecord(confirmModal.recordId);
+      setConfirmModal({
+        open: false,
+        kind: "delete",
+        recordId: null,
+        overwrite: null,
+      });
+    } else if (confirmModal.kind === "overwrite" && confirmModal.overwrite) {
+      const { originalRecordId, targetRecordId, targetDate } = confirmModal.overwrite;
+      setDate(targetDate);
+      setConfirmModal({
+        open: false,
+        kind: "delete",
+        recordId: null,
+        overwrite: null,
+      });
+      await performSave({
+        forceDeleteId: originalRecordId,
+        forceOverwriteId: targetRecordId,
+      });
+    }
+  }
+
+  function handleConfirmCancel() {
+    setConfirmModal({
+      open: false,
+      kind: "delete",
+      recordId: null,
+      overwrite: null,
+    });
   }
 
   function drawWordCloud() {
@@ -255,6 +352,9 @@ export default function DreamPage() {
           {saveMsg && (
             <span className="text-sm text-stargold animate-pulse">{saveMsg}</span>
           )}
+          {saveError && (
+            <span className="text-sm text-red-400">{saveError}</span>
+          )}
           <button className="btn-primary flex items-center gap-2" onClick={handleSave}>
             <Save size={16} />
             保存梦境
@@ -358,11 +458,19 @@ export default function DreamPage() {
 
       <ConfirmModal
         open={confirmModal.open}
-        title="删除梦境记录"
-        message="确定要删除这条梦境记录吗？这个梦将从你的记忆中消失。"
+        title={
+          confirmModal.kind === "delete"
+            ? "删除梦境记录"
+            : "日期冲突，是否覆盖？"
+        }
+        message={
+          confirmModal.kind === "delete"
+            ? "确定要删除这条梦境记录吗？这个梦将从你的记忆中消失。"
+            : `目标日期 ${formatDate(confirmModal.overwrite!.targetDate)} 已经有一条梦境记录。用当前内容覆盖后，原来正在编辑的梦境将被删除，目标日期的旧内容会被替换。`
+        }
         type="danger"
-        onConfirm={handleDeleteConfirmed}
-        onCancel={() => setConfirmModal({ open: false, recordId: null })}
+        onConfirm={handleConfirmOk}
+        onCancel={handleConfirmCancel}
       />
     </div>
   );
