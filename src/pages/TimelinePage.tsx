@@ -64,17 +64,19 @@ export default function TimelinePage() {
     <div className="space-y-6">
       <h2 className="section-title">梦境回溯</h2>
 
-      <div className="flex items-center gap-3 flex-wrap">
-        <Filter size={16} className="text-white/40" />
-        {EMOTION_OPTIONS.map((emotion) => (
-          <span
-            key={emotion}
-            className={`tag-pill ${activeEmotion === emotion ? "tag-pill-active" : ""}`}
-            onClick={() => setActiveEmotion(emotion)}
-          >
-            {emotion}
-          </span>
-        ))}
+      <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+        <div className="flex items-center gap-3 flex-wrap">
+          <Filter size={16} className="text-white/40 shrink-0" />
+          {EMOTION_OPTIONS.map((emotion) => (
+            <span
+              key={emotion}
+              className={`tag-pill ${activeEmotion === emotion ? "tag-pill-active" : ""}`}
+              onClick={() => setActiveEmotion(emotion)}
+            >
+              {emotion}
+            </span>
+          ))}
+        </div>
       </div>
 
       {filtered.length === 0 ? (

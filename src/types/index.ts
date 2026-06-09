@@ -96,3 +96,13 @@ export interface WordCloudItem {
   text: string;
   value: number;
 }
+
+export interface UserSettings {
+  targetSleepMinutes: number;
+  targetBedtime: string;
+}
+
+export const DEFAULT_USER_SETTINGS: UserSettings = {
+  targetSleepMinutes: 480,
+  targetBedtime: "23:00",
+};

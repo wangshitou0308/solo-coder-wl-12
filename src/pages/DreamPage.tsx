@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from "react";
-import { BookOpen, Trash2, Save, Cloud } from "lucide-react";
+import { BookOpen, Trash2, Save, Cloud, Edit3, X } from "lucide-react";
+import { useSearchParams } from "react-router-dom";
 import {
   DreamRecord,
   DreamType,
@@ -11,19 +12,34 @@ import {
 } from "@/types";
 import { useDreamStore } from "@/stores";
 import { generateId, getTodayString, formatDate, extractKeywords } from "@/utils/calc";
+import ConfirmModal from "@/components/ConfirmModal";
+import EmptyState from "@/components/EmptyState";
 
 export default function DreamPage() {
   const { records, fetchRecords, addRecord, updateRecord, deleteRecord } = useDreamStore();
+  const [searchParams] = useSearchParams();
   const [date, setDate] = useState(getTodayString());
   const [content, setContent] = useState("");
   const [dreamType, setDreamType] = useState<DreamType>("普通梦");
   const [emotions, setEmotions] = useState<DreamEmotion[]>([]);
   const [saveMsg, setSaveMsg] = useState("");
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [confirmModal, setConfirmModal] = useState<{ open: boolean; recordId: string | null }>({
+    open: false,
+    recordId: null,
+  });
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
   useEffect(() => {
     fetchRecords();
   }, [fetchRecords]);
+
+  useEffect(() => {
+    const dateParam = searchParams.get("date");
+    if (dateParam) {
+      setDate(dateParam);
+    }
+  }, [searchParams]);
 
   useEffect(() => {
     drawWordCloud();
@@ -37,38 +53,77 @@ export default function DreamPage() {
     );
   }
 
+  function resetFormContent() {
+    setContent("");
+    setEmotions([]);
+    setDreamType("普通梦");
+  }
+
+  function handleEdit(record: DreamRecord) {
+    setDate(record.date);
+    setContent(record.content);
+    setDreamType(record.dreamType);
+    setEmotions(record.emotions);
+    setEditingId(record.id);
+  }
+
+  function handleCancelEdit() {
+    resetFormContent();
+    setEditingId(null);
+  }
+
+  function handleConfirmDelete(recordId: string) {
+    setConfirmModal({ open: true, recordId });
+  }
+
+  async function handleDeleteConfirmed() {
+    if (confirmModal.recordId) {
+      await deleteRecord(confirmModal.recordId);
+    }
+    setConfirmModal({ open: false, recordId: null });
+  }
+
   async function handleSave() {
     if (!content.trim()) return;
     const now = Date.now();
-    const existing = records.find((r) => r.date === date);
+    let recordId: string;
+    let createdAt: number;
+
+    if (editingId) {
+      const existing = records.find((r) => r.id === editingId);
+      recordId = editingId;
+      createdAt = existing ? existing.createdAt : now;
+    } else {
+      const existingByDate = records.find((r) => r.date === date);
+      recordId = existingByDate ? existingByDate.id : generateId();
+      createdAt = existingByDate ? existingByDate.createdAt : now;
+    }
+
     const record: DreamRecord = {
-      id: existing ? existing.id : generateId(),
+      id: recordId,
       date,
       content: content.trim(),
       dreamType,
       emotions,
-      createdAt: existing ? existing.createdAt : now,
+      createdAt,
       updatedAt: now,
     };
-    if (existing) {
+
+    if (editingId || records.find((r) => r.date === date)) {
       await updateRecord(record);
-      setSaveMsg("已更新该日期梦境");
+      setSaveMsg(editingId ? "编辑已保存" : "已更新该日期梦境");
     } else {
       await addRecord(record);
       setSaveMsg("保存成功");
     }
-    setTimeout(() => setSaveMsg(""), 2000);
-    setContent("");
-    setEmotions([]);
-    setDreamType("普通梦");
-    setDate(getTodayString());
-  }
 
-  async function handleDelete(id: string) {
-    await deleteRecord(id);
+    setTimeout(() => setSaveMsg(""), 2000);
+    resetFormContent();
+    setEditingId(null);
   }
 
   function drawWordCloud() {
+    if (records.length === 0) return;
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext("2d");
@@ -139,6 +194,11 @@ export default function DreamPage() {
   return (
     <div className="space-y-6">
       <h2 className="section-title">梦境日记</h2>
+      {editingId !== null && (
+        <p className="text-sm text-aurora -mt-3">
+          正在编辑 {formatDate(date)} 的梦境
+        </p>
+      )}
 
       <div className="glass-card p-6 space-y-4">
         <div>
@@ -199,6 +259,15 @@ export default function DreamPage() {
             <Save size={16} />
             保存梦境
           </button>
+          {editingId !== null && (
+            <button
+              className="btn-ghost flex items-center gap-2"
+              onClick={handleCancelEdit}
+            >
+              <X size={16} />
+              取消编辑
+            </button>
+          )}
         </div>
       </div>
 
@@ -207,49 +276,94 @@ export default function DreamPage() {
           <Cloud size={20} />
           梦境主题词云
         </h3>
-        <canvas
-          ref={canvasRef}
-          className="w-full h-[300px] rounded-xl"
-          style={{ width: "100%", height: 300 }}
-        />
+        {records.length === 0 ? (
+          <EmptyState
+            title="梦境词云暂无数据"
+            description="记录一些梦境后，这里会生成你的梦境主题词云"
+          />
+        ) : (
+          <canvas
+            ref={canvasRef}
+            className="w-full h-[300px] rounded-xl"
+            style={{ width: "100%", height: 300 }}
+          />
+        )}
       </div>
 
-      <div className="space-y-3">
-        {records.map((record) => (
-          <div key={record.id} className="glass-card p-4 flex justify-between items-start gap-3">
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2 mb-1">
-                <BookOpen size={14} className="text-stargold shrink-0" />
-                <span className="text-sm text-white/60">{formatDate(record.date)}</span>
-                <span className="tag-pill text-xs py-0 px-2">{record.dreamType}</span>
-              </div>
-              <p className="text-sm text-white/80 line-clamp-2">{record.content}</p>
-              {record.emotions.length > 0 && (
-                <div className="flex flex-wrap gap-1 mt-2">
-                  {record.emotions.map((e) => (
-                    <span
-                      key={e}
-                      className="text-xs px-2 py-0.5 rounded-full"
-                      style={{
-                        backgroundColor: DREAM_EMOTION_COLORS[e] + "33",
-                        color: DREAM_EMOTION_COLORS[e],
-                      }}
-                    >
-                      {e}
-                    </span>
-                  ))}
-                </div>
-              )}
-            </div>
-            <button
-              className="text-white/30 hover:text-red-400 transition-colors shrink-0"
-              onClick={() => handleDelete(record.id)}
+      {records.length === 0 ? (
+        <EmptyState
+          title="还没有梦境记录"
+          description="记录下你的第一个梦境，留住那些奇妙的故事"
+        />
+      ) : (
+        <div className="space-y-3">
+          {records.map((record) => (
+            <div
+              key={record.id}
+              className={`glass-card p-4 flex justify-between items-start gap-3 cursor-pointer transition-colors ${
+                editingId === record.id
+                  ? "ring-2 ring-aurora border-aurora/50"
+                  : "hover:bg-white/5"
+              }`}
+              onClick={() => handleEdit(record)}
             >
-              <Trash2 size={16} />
-            </button>
-          </div>
-        ))}
-      </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 mb-1">
+                  <BookOpen size={14} className="text-stargold shrink-0" />
+                  <span className="text-sm text-white/60">{formatDate(record.date)}</span>
+                  <span className="tag-pill text-xs py-0 px-2">{record.dreamType}</span>
+                </div>
+                <p className="text-sm text-white/80 line-clamp-2">{record.content}</p>
+                {record.emotions.length > 0 && (
+                  <div className="flex flex-wrap gap-1 mt-2">
+                    {record.emotions.map((e) => (
+                      <span
+                        key={e}
+                        className="text-xs px-2 py-0.5 rounded-full"
+                        style={{
+                          backgroundColor: DREAM_EMOTION_COLORS[e] + "33",
+                          color: DREAM_EMOTION_COLORS[e],
+                        }}
+                      >
+                        {e}
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
+              <div className="flex items-center gap-1 shrink-0">
+                <button
+                  className="text-white/30 hover:text-aurora transition-colors p-1"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleEdit(record);
+                  }}
+                >
+                  <Edit3 size={16} />
+                </button>
+                <button
+                  className="text-white/30 hover:text-red-400 transition-colors p-1"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleConfirmDelete(record.id);
+                  }}
+                >
+                  <Trash2 size={16} />
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <ConfirmModal
+        open={confirmModal.open}
+        title="删除梦境记录"
+        message="确定要删除这条梦境记录吗？这个梦将从你的记忆中消失。"
+        type="danger"
+        onConfirm={handleDeleteConfirmed}
+        onCancel={() => setConfirmModal({ open: false, recordId: null })}
+      />
     </div>
   );
 }

@@ -24,6 +24,7 @@ import {
 import { useSleepStore, useDreamStore } from "@/stores";
 import { DREAM_EMOTIONS, DREAM_EMOTION_COLORS } from "@/types";
 import { getMonthRange, formatMinutes } from "@/utils/calc";
+import EmptyState from "@/components/EmptyState";
 
 ChartJS.register(
   CategoryScale,
@@ -235,12 +236,12 @@ export default function ReportPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 sm:gap-0">
         <h2 className="section-title flex items-center gap-2">
           <FileText className="w-5 h-5" />
           月度报告
         </h2>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 sm:justify-center">
           <button
             onClick={() => setMonthOffset((o) => o - 1)}
             className="p-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-white/60 transition-colors"
@@ -260,74 +261,87 @@ export default function ReportPage() {
         </div>
       </div>
 
-      <div
-        ref={reportRef}
-        className="glass-card p-8"
-        style={{ background: "rgba(255,255,255,0.03)" }}
-      >
-        <div className="text-center mb-8">
-          <h3 className="text-xl font-bold text-white/90">
-            DreamLog 月度睡眠报告
-          </h3>
-          <p className="text-white/50 text-sm mt-1">{monthLabel}</p>
+      {filteredSleep.length === 0 && filteredDream.length === 0 ? (
+        <div className="glass-card p-8" style={{ background: "rgba(255,255,255,0.03)" }}>
+          <EmptyState
+            title="本月暂无睡眠与梦境数据"
+            description="切换到其他月份，或开始记录本月的睡眠与梦境吧"
+          />
         </div>
+      ) : (
+        <div
+          ref={reportRef}
+          className="glass-card p-8"
+          style={{ background: "rgba(255,255,255,0.03)" }}
+        >
+          <div className="text-center mb-8">
+            <h3 className="text-xl font-bold text-white/90">
+              DreamLog 月度睡眠报告
+            </h3>
+            <p className="text-white/50 text-sm mt-1">{monthLabel}</p>
+          </div>
 
-        <div className="grid grid-cols-2 gap-4 mb-8">
-          {stats.map((s) => (
-            <div
-              key={s.label}
-              className="rounded-xl p-4"
-              style={{ background: "rgba(255,255,255,0.04)" }}
-            >
-              <div className={`flex items-center gap-2 mb-2 ${s.color}`}>
-                {s.icon}
-                <span className="text-xs text-white/50">{s.label}</span>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-8">
+            {stats.map((s) => (
+              <div
+                key={s.label}
+                className="rounded-xl p-4"
+                style={{ background: "rgba(255,255,255,0.04)" }}
+              >
+                <div className={`flex items-center gap-2 mb-2 ${s.color}`}>
+                  {s.icon}
+                  <span className="text-xs text-white/50">{s.label}</span>
+                </div>
+                <p className="text-lg font-bold text-white/90">{s.value}</p>
               </div>
-              <p className="text-lg font-bold text-white/90">{s.value}</p>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
 
-        <div className="mb-8">
-          <h4 className="text-white/70 text-sm font-medium mb-3">
-            睡眠时长趋势
-          </h4>
-          <div style={{ height: 200 }}>
-            {filteredSleep.length > 0 ? (
-              <Line data={chartData} options={chartOptions} />
-            ) : (
-              <p className="text-slate-500 text-center py-8 text-sm">
-                本月暂无睡眠数据
-              </p>
-            )}
+          <div className="mb-8 overflow-x-auto">
+            <h4 className="text-white/70 text-sm font-medium mb-3">
+              睡眠时长趋势
+            </h4>
+            <div style={{ height: 200 }} className="min-w-[360px]">
+              {filteredSleep.length > 0 ? (
+                <Line data={chartData} options={chartOptions} />
+              ) : (
+                <p className="text-slate-500 text-center py-8 text-sm">
+                  本月暂无睡眠数据
+                </p>
+              )}
+            </div>
+          </div>
+
+          <div className="mb-8">
+            <h4 className="text-white/70 text-sm font-medium mb-3">
+              改善建议
+            </h4>
+            <ul className="space-y-2">
+              {suggestions.map((s, i) => (
+                <li
+                  key={i}
+                  className="flex items-start gap-2 text-sm text-white/70"
+                >
+                  <span className="mt-1 w-1.5 h-1.5 rounded-full bg-indigo-400 shrink-0" />
+                  {s}
+                </li>
+              ))}
+            </ul>
+          </div>
+
+          <div className="text-center text-white/30 text-xs pt-6 border-t border-white/5">
+            <p>由 DreamLog 生成</p>
+            <p className="mt-0.5">{new Date().toLocaleDateString("zh-CN")}</p>
           </div>
         </div>
-
-        <div className="mb-8">
-          <h4 className="text-white/70 text-sm font-medium mb-3">
-            改善建议
-          </h4>
-          <ul className="space-y-2">
-            {suggestions.map((s, i) => (
-              <li
-                key={i}
-                className="flex items-start gap-2 text-sm text-white/70"
-              >
-                <span className="mt-1 w-1.5 h-1.5 rounded-full bg-indigo-400 shrink-0" />
-                {s}
-              </li>
-            ))}
-          </ul>
-        </div>
-
-        <div className="text-center text-white/30 text-xs pt-6 border-t border-white/5">
-          <p>由 DreamLog 生成</p>
-          <p className="mt-0.5">{new Date().toLocaleDateString("zh-CN")}</p>
-        </div>
-      </div>
+      )}
 
       <div className="flex justify-center">
-        <button onClick={handleExport} className="btn-primary flex items-center gap-2">
+        <button
+          onClick={handleExport}
+          disabled={filteredSleep.length === 0 && filteredDream.length === 0}
+          className="btn-primary flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+        >
           <Download size={16} />
           导出 PDF
         </button>

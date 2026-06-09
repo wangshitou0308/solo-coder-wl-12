@@ -112,3 +112,47 @@ export function isLateBedtime(bedTime: string): boolean {
   const h = getBedtimeHour(bedTime);
   return h >= 1 && h < 6;
 }
+
+export function getPrevWeekRange(): { start: string; end: string } {
+  const now = new Date();
+  const day = now.getDay() || 7;
+  const thisMonday = new Date(now);
+  thisMonday.setDate(now.getDate() - day + 1);
+  const prevSunday = new Date(thisMonday);
+  prevSunday.setDate(thisMonday.getDate() - 1);
+  const prevMonday = new Date(prevSunday);
+  prevMonday.setDate(prevSunday.getDate() - 6);
+  return {
+    start: toLocalDateStr(prevMonday),
+    end: toLocalDateStr(prevSunday),
+  };
+}
+
+export function formatPercent(
+  numerator: number,
+  denominator: number,
+  decimals: number = 0
+): string {
+  if (denominator === 0) return "-";
+  const percent = (numerator / denominator) * 100;
+  return `${percent.toFixed(decimals)}%`;
+}
+
+export function timeToMinutes(timeStr: string): number {
+  const [h, m] = timeStr.split(":").map(Number);
+  let minutes = h * 60 + m;
+  if (h >= 0 && h < 12) {
+    minutes += 24 * 60;
+  }
+  return minutes;
+}
+
+export function minutesToHHMM(totalMinutes: number): string {
+  let minutes = totalMinutes;
+  if (minutes >= 24 * 60) {
+    minutes -= 24 * 60;
+  }
+  const h = Math.floor(minutes / 60);
+  const m = minutes % 60;
+  return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
+}

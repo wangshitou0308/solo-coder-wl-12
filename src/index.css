@@ -84,3 +84,34 @@ input[type="time"]::-webkit-calendar-picker-indicator {
 input[type="date"]::-webkit-calendar-picker-indicator {
   filter: invert(1);
 }
+
+@layer utilities {
+  .scrollbar-thin {
+    scrollbar-width: thin;
+  }
+  .scrollbar-thin::-webkit-scrollbar {
+    height: 4px;
+    width: 4px;
+  }
+}
+
+/* 横滚容器 */
+.horizontal-scroll {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
+}
+.horizontal-scroll::-webkit-scrollbar {
+  height: 4px;
+}
+.horizontal-scroll::-webkit-scrollbar-thumb {
+  background: rgba(139, 92, 246, 0.3);
+  border-radius: 2px;
+}
+
+/* 移动端图表容器最小高度 */
+@media (max-width: 640px) {
+  .mobile-chart-container canvas {
+    max-height: 220px !important;
+  }
+}

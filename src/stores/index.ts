@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import { SleepRecord, DreamRecord } from "@/types";
+import { SleepRecord, DreamRecord, UserSettings, DEFAULT_USER_SETTINGS } from "@/types";
 import * as db from "@/utils/db";
 
 interface SleepStore {
@@ -66,4 +66,40 @@ export const useDreamStore = create<DreamStore>((set) => ({
     await db.deleteDreamRecord(id);
     set((state) => ({ records: state.records.filter((r) => r.id !== id) }));
   },
+}));
+
+function loadSettings(): UserSettings {
+  try {
+    const raw = localStorage.getItem("dreamlog-settings");
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      return { ...DEFAULT_USER_SETTINGS, ...parsed };
+    }
+  } catch {
+  }
+  return { ...DEFAULT_USER_SETTINGS };
+}
+
+interface SettingsStore {
+  settings: UserSettings;
+  updateSettings: (s: Partial<UserSettings>) => void;
+  resetSettings: () => void;
+}
+
+export const useSettingsStore = create<SettingsStore>((set) => ({
+  settings: loadSettings(),
+  updateSettings: (s) =>
+    set((state) => {
+      const next = { ...state.settings, ...s };
+      localStorage.setItem("dreamlog-settings", JSON.stringify(next));
+      return { settings: next };
+    }),
+  resetSettings: () =>
+    set(() => {
+      localStorage.setItem(
+        "dreamlog-settings",
+        JSON.stringify(DEFAULT_USER_SETTINGS)
+      );
+      return { settings: { ...DEFAULT_USER_SETTINGS } };
+    }),
 }));

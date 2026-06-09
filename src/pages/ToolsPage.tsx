@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from "react";
-import { Wind, CloudRain, Waves, Flame, Play, Pause, RotateCcw, Timer } from "lucide-react";
+import { Wind, CloudRain, Waves, Flame, Play, Pause, RotateCcw, Timer, Square } from "lucide-react";
 
 type BreathPhase = "inhale" | "hold" | "exhale";
 
@@ -144,6 +144,21 @@ function WhiteNoiseMixer() {
   const [active, setActive] = useState<Record<string, boolean>>({});
   const [master, setMaster] = useState(70);
 
+  const anyActive = Object.values(active).some(Boolean);
+
+  const stopAll = useCallback(() => {
+    nodesRef.current.forEach((nodes) => {
+      nodes.source.stop();
+      nodes.gain.disconnect();
+    });
+    nodesRef.current.clear();
+    setActive((prev) => {
+      const next: Record<string, boolean> = {};
+      for (const k of Object.keys(prev)) next[k] = false;
+      return next;
+    });
+  }, []);
+
   const getCtx = useCallback(() => {
     if (!ctxRef.current) ctxRef.current = new AudioContext();
     return ctxRef.current;
@@ -205,40 +220,52 @@ function WhiteNoiseMixer() {
 
   const changeMaster = (val: number) => {
     setMaster(val);
-    nodesRef.current.forEach((nodes) => {
-      const name = [...nodesRef.current.entries()].find(([, n]) => n === nodes)?.[0];
-      if (name) {
-        const vol = volumes[name] ?? 50;
-        nodes.gain.gain.value = (vol / 100) * (val / 100);
-      }
+    nodesRef.current.forEach((nodes, name) => {
+      const vol = volumes[name] ?? 50;
+      nodes.gain.gain.value = (vol / 100) * (val / 100);
     });
   };
 
   return (
     <div className="glass-card p-6 space-y-4">
-      <h3 className="section-title text-lg">白噪音混音器</h3>
+      <div className="flex items-center justify-between mb-4">
+        <h3 className="section-title text-lg">白噪音混音器</h3>
+        <button
+          onClick={stopAll}
+          disabled={!anyActive}
+          className="text-xs px-3 py-1.5 rounded-full border border-red-400/30 bg-red-500/10 text-red-300 hover:bg-red-500/20 disabled:opacity-30 disabled:cursor-not-allowed transition-all"
+        >
+          <Square size={12} className="inline mr-1" /> 停止全部
+        </button>
+      </div>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-        {NOISE_SOURCES.map((src) => (
-          <div key={src.name} className="flex items-center gap-3 p-3 rounded-xl bg-white/5">
-            <button
-              onClick={() => toggleSource(src)}
-              className={`p-2 rounded-lg transition-colors ${active[src.name] ? "bg-aurora/20 text-aurora" : "bg-white/5 text-white/40"}`}
-            >
-              {src.icon}
-            </button>
-            <div className="flex-1 space-y-1">
-              <p className="text-sm text-white/70">{src.name}</p>
-              <input
-                type="range"
-                min={0}
-                max={100}
-                value={volumes[src.name] ?? 50}
-                onChange={(e) => changeVolume(src.name, Number(e.target.value))}
-                className="w-full h-1 accent-aurora cursor-pointer"
-              />
+        {NOISE_SOURCES.map((src) => {
+          const isPlaying = active[src.name] === true;
+          return (
+            <div key={src.name} className={`flex items-center gap-3 p-3 rounded-xl bg-white/5 transition-all ${isPlaying ? "ring-1 ring-aurora/50 bg-aurora/5" : ""}`}>
+              <button
+                onClick={() => toggleSource(src)}
+                className={`p-2 rounded-lg transition-colors relative ${isPlaying ? "bg-aurora/20 text-aurora animate-pulse" : "bg-white/5 text-white/40"}`}
+              >
+                {src.icon}
+              </button>
+              <div className="flex-1 space-y-1">
+                <div className="flex items-center gap-2">
+                  <p className="text-sm text-white/70">{src.name}</p>
+                  {isPlaying && <span className="w-2 h-2 rounded-full bg-aurora animate-pulse shrink-0" />}
+                </div>
+                <input
+                  type="range"
+                  min={0}
+                  max={100}
+                  value={volumes[src.name] ?? 50}
+                  onChange={(e) => changeVolume(src.name, Number(e.target.value))}
+                  className="w-full h-1 accent-aurora cursor-pointer"
+                />
+              </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
       <div className="flex items-center gap-3 pt-2 border-t border-white/10">
         <span className="text-sm text-white/50 shrink-0">主音量</span>
@@ -277,6 +304,16 @@ function StretchCards() {
   const [running, setRunning] = useState<Record<string, boolean>>({});
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
+  const anyRunning = Object.values(running).some(Boolean);
+
+  const stopAll = () => {
+    setRunning((prev) => {
+      const next: Record<string, boolean> = {};
+      for (const k of Object.keys(prev)) next[k] = false;
+      return next;
+    });
+  };
+
   useEffect(() => {
     const hasActive = Object.values(running).some(Boolean);
     if (hasActive) {
@@ -307,23 +344,32 @@ function StretchCards() {
 
   return (
     <div className="glass-card p-6 space-y-4">
-      <h3 className="section-title text-lg flex items-center gap-2">
-        <Timer className="w-5 h-5" /> 睡前拉伸
-      </h3>
-      <div className="flex gap-3 overflow-x-auto pb-2 -mx-1 px-1">
+      <div className="flex items-center justify-between mb-4">
+        <h3 className="section-title text-lg flex items-center gap-2">
+          <Timer className="w-5 h-5" /> 睡前拉伸
+        </h3>
+        <button
+          onClick={stopAll}
+          disabled={!anyRunning}
+          className="text-xs px-3 py-1.5 rounded-full border border-red-400/30 bg-red-500/10 text-red-300 hover:bg-red-500/20 disabled:opacity-30 disabled:cursor-not-allowed transition-all"
+        >
+          <Square size={12} className="inline mr-1" /> 停止全部
+        </button>
+      </div>
+      <div className="flex gap-3 overflow-x-auto pb-2 -mx-1 px-1 horizontal-scroll">
         {STRETCHES.map((s) => {
           const isActive = running[s.name];
           const timeLeft = timers[s.name] ?? s.defaultSec;
           return (
             <div
               key={s.name}
-              className={`glass-card shrink-0 w-44 p-4 flex flex-col items-center gap-2 transition-all ${isActive ? "border-aurora/50 shadow-lg shadow-aurora/10" : ""}`}
+              className={`glass-card shrink-0 w-36 sm:w-44 p-4 flex flex-col items-center gap-2 transition-all ${isActive ? "border-aurora/50 shadow-lg shadow-aurora/10" : ""}`}
             >
-              <span className="text-2xl">{s.emoji}</span>
+              <span className={`text-2xl transition-all ${isActive ? "shadow-aurora/20 shadow-lg animate-pulse rounded-full" : ""}`}>{s.emoji}</span>
               <p className="text-sm font-medium text-white/80 text-center">{s.name}</p>
               <p className="text-xs text-white/40 text-center leading-relaxed">{s.desc}</p>
               {isActive && (
-                <p className="text-stargold font-semibold tabular-nums">{timeLeft}s</p>
+                <p className="text-stargold font-bold tabular-nums">{timeLeft}s</p>
               )}
               <button
                 onClick={() => startTimer(s)}

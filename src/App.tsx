@@ -1,5 +1,6 @@
 import { BrowserRouter as Router, Routes, Route, Navigate } from "react-router-dom";
 import Layout from "@/components/layout/Layout";
+import Home from "@/pages/Home";
 import SleepPage from "@/pages/SleepPage";
 import DreamPage from "@/pages/DreamPage";
 import AnalysisPage from "@/pages/AnalysisPage";
@@ -13,7 +14,8 @@ export default function App() {
     <Router>
       <Routes>
         <Route element={<Layout />}>
-          <Route path="/" element={<Navigate to="/sleep" replace />} />
+          <Route path="/" element={<Navigate to="/home" replace />} />
+          <Route path="/home" element={<Home />} />
           <Route path="/sleep" element={<SleepPage />} />
           <Route path="/dream" element={<DreamPage />} />
           <Route path="/analysis" element={<AnalysisPage />} />
